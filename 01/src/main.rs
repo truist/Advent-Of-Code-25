@@ -29,17 +29,26 @@ fn process(data: String) {
 
     for line in data.lines() {
         let (i, first) = line.char_indices().next().unwrap();
-        let distance: isize = line[i + first.len_utf8()..].parse::<isize>().unwrap() % 100;
+        let mut distance: isize = line[i + first.len_utf8()..].parse::<isize>().unwrap();
+        let mut extra_zeros = distance / 100;
+        distance = distance % 100;
         match first {
             'L' => {
+                if 0 == pointer {
+                    extra_zeros -= 1;
+                }
                 pointer -= distance;
                 if pointer < 0 {
+                    extra_zeros += 1;
                     pointer += 100;
                 }
             }
             'R' => {
                 pointer += distance;
                 if pointer > 99 {
+                    if pointer > 100 {
+                        extra_zeros += 1;
+                    }
                     pointer -= 100;
                 }
             }
@@ -47,6 +56,7 @@ fn process(data: String) {
                 panic!("Unexpected value in {line}");
             }
         }
+        zeros += extra_zeros;
         if 0 == pointer {
             zeros += 1;
         }
