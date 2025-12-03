@@ -32,22 +32,26 @@ fn process(data: String) {
         let end: usize = ids.next().unwrap().parse().unwrap();
 
         'outer: for id in start..=end {
-            let strval = id.to_string();
+            let strval: Vec<char> = id.to_string().chars().collect();
             let len = strval.len();
-            if len % 2 != 0 {
-                continue;
-            }
 
-            let left = &mut strval[0..len / 2].chars();
-            let right = &mut strval[len / 2..].chars();
-
-            while let Some(lchar) = left.next() {
-                let rchar = right.next().unwrap();
-                if lchar.ne(&rchar) {
-                    continue 'outer;
+            'div: for divisor in [2, 3, 5, 7] {
+                if len % divisor != 0 {
+                    continue;
                 }
+                let segment_len = len / divisor;
+
+                for segment in 1..divisor {
+                    for i in 0..len / divisor {
+                        if strval[i] != strval[segment * segment_len + i] {
+                            continue 'div;
+                        }
+                    }
+                }
+
+                invalids += id;
+                continue 'outer;
             }
-            invalids += id;
         }
     }
 
