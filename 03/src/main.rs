@@ -30,9 +30,9 @@ fn process(data: String) {
 
         let mut max_val = 0;
         let mut max_index = chars.len();
-        for i in (0..chars.len() - 1).rev() {
+        for i in 0..chars.len() - 1 {
             let val = chars[i].to_digit(10).unwrap();
-            if val >= max_val {
+            if val > max_val {
                 max_val = val;
                 max_index = i;
             }
