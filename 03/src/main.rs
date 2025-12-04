@@ -23,32 +23,35 @@ fn main() {
     process(contents);
 }
 
+const JOLT_LEN: usize = 12;
+
 fn process(data: String) {
     let mut total = 0;
     for bank in data.lines() {
         let chars: Vec<char> = bank.chars().collect();
 
-        let mut max_val = 0;
-        let mut max_index = chars.len();
-        for i in 0..chars.len() - 1 {
-            let val = chars[i].to_digit(10).unwrap();
-            if val > max_val {
-                max_val = val;
-                max_index = i;
+        let mut vals = vec![];
+        let mut next_start = 0;
+        for i in 0..JOLT_LEN {
+            let stopping_point = chars.len() - (JOLT_LEN - 1 - i);
+            let mut max_val = 0;
+            let mut max_index = chars.len();
+            for i in next_start..stopping_point {
+                let val = chars[i].to_digit(10).unwrap();
+                if val > max_val {
+                    max_val = val;
+                    max_index = i;
+                }
             }
-        }
-        let first_val = max_val;
 
-        max_val = 0;
-        for i in max_index + 1..chars.len() {
-            let val = chars[i].to_digit(10).unwrap();
-            if val > max_val {
-                max_val = val;
-            }
+            vals.push(max_val);
+            next_start = max_index + 1;
         }
-        let second_val = max_val;
 
-        let combined_val: usize = format!("{}{}", first_val.to_string(), second_val.to_string())
+        let combined_val: u64 = vals
+            .iter()
+            .map(|val| val.to_string())
+            .collect::<String>()
             .parse()
             .unwrap();
         total += combined_val;
