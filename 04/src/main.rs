@@ -24,21 +24,32 @@ fn main() {
 }
 
 fn process(data: String) {
-    let grid: Vec<Vec<char>> = data.lines().map(|line| line.chars().collect()).collect();
+    let mut grid: Vec<Vec<char>> = data.lines().map(|line| line.chars().collect()).collect();
 
-    let mut total_rolls = 0;
-    for r in 0..grid.len() {
-        for c in 0..grid[0].len() {
-            if grid[r][c] == '@' && adjacent_rolls(&grid, r as isize, c as isize) < 4 {
-                total_rolls += 1;
-                // print!("x");
-            } else {
-                // print!("{}", grid[r][c]);
+    let mut total_removed = 0;
+    loop {
+        let mut removeable = 0;
+        let mut next_grid = grid.clone();
+        for r in 0..grid.len() {
+            for c in 0..grid[0].len() {
+                if grid[r][c] == '@' && adjacent_rolls(&grid, r as isize, c as isize) < 4 {
+                    removeable += 1;
+                    next_grid[r][c] = 'x';
+                    // print!("x");
+                } else {
+                    // print!("{}", grid[r][c]);
+                }
             }
+            // println!("");
         }
-        // println!("");
+        // println!("{removeable}");
+        if removeable == 0 {
+            break;
+        }
+        total_removed += removeable;
+        grid = next_grid;
     }
-    println!("{total_rolls}");
+    println!("{total_removed}");
 }
 
 fn adjacent_rolls(grid: &Vec<Vec<char>>, r: isize, c: isize) -> usize {
