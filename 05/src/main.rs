@@ -93,11 +93,15 @@ fn merge_ranges(ranges: &Vec<Range>) -> (Vec<Range>, usize) {
                 merged.swap_remove(m);
                 merged_count += 1;
                 continue 'range_loop;
+            } else if range.includes(merge.min) && range.includes(merge.max) {
+                // range covers merge, so remove merge and add range
+                merged.push((*range).clone());
+                merged.swap_remove(m);
+                merged_count += 1;
             }
         }
         // if we got here, this range is distinct
         merged.push((*range).clone());
     }
-    merged.sort_by(|a, b| a.min.cmp(&b.min));
     (merged, merged_count)
 }
