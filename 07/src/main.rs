@@ -29,10 +29,9 @@ fn process(data: String) {
     let mut chars: Vec<char> = lines.next().unwrap().chars().collect();
     let cols = chars.len();
 
-    let mut beams = vec![false; cols];
-    let mut splits = 0;
+    let mut timelines = vec![0; cols];
 
-    beams[chars.iter().position(|&c| c == 'S').unwrap()] = true;
+    timelines[chars.iter().position(|&c| c == 'S').unwrap()] = 1;
 
     while let Some(line) = lines.next() {
         chars = line.chars().collect();
@@ -43,15 +42,34 @@ fn process(data: String) {
             .filter_map(|(i, &c)| (c == '^').then_some(i))
             .collect();
         for splitter in splitter_indices {
-            if beams[splitter] {
-                beams[splitter - 1] = true;
-                beams[splitter] = false;
-                beams[splitter + 1] = true;
-
-                splits += 1;
+            if timelines[splitter] > 0 {
+                timelines[splitter - 1] += timelines[splitter];
+                timelines[splitter + 1] += timelines[splitter];
+                timelines[splitter] = 0;
             }
         }
     }
 
-    println!("{splits}");
+    println!("{}", timelines.iter().sum::<usize>());
 }
+
+/*
+
+.......S....... 1 timeline
+.......1.......
+......1^1...... adds 1 = 2
+......1.1......
+.....1^2^1..... left adds 1; right adds 1; = 4
+.....1.2.1.....
+....1^3^3^1.... left adds 1; middle gets hit twice so adds 2; right adds 1; = 8
+....1.3.3.1....
+...1^4^331^1... left adds 1; middle gets hit thrice so adds 3; right adds 1; 13
+...1.4.331.1...
+..1^5^434^2^1.. 20
+..1.5.434.2.1..
+.1^154^74.21^1. 26
+.1.154.74.21.1.
+1^2^0^1^1^211^1 40
+...............
+
+*/
