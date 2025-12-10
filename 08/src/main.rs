@@ -23,7 +23,7 @@ fn main() {
     process(contents);
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct JunctionBox {
     x: usize,
     y: usize,
@@ -50,27 +50,30 @@ impl JunctionBox {
 
 #[derive(Debug)]
 struct Circuit<'a> {
-    box_indices: Vec<usize>,
-    boxes: &'a Vec<JunctionBox>,
+    boxes: Vec<&'a JunctionBox>,
 }
 
 impl<'a> fmt::Display for Circuit<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(")?;
-        for i in self.box_indices.iter() {
-            write!(f, "{}", self.boxes[*i])?;
+        for jbox in self.boxes.iter() {
+            write!(f, "{}", jbox)?;
         }
-        write!(f, ")")
+        write!(f, ") ({})", self.len())
     }
 }
 
 impl<'a> Circuit<'a> {
-    fn contains(&self, jb: &usize) -> bool {
-        self.box_indices.contains(jb)
+    fn contains(&self, jbox: &JunctionBox) -> bool {
+        self.boxes.contains(&jbox)
     }
 
-    fn push(&mut self, jb: usize) {
-        self.box_indices.push(jb);
+    fn len(&self) -> usize {
+        self.boxes.len()
+    }
+
+    fn push(&mut self, jbox: &'a JunctionBox) {
+        self.boxes.push(jbox);
     }
 }
 
@@ -101,6 +104,9 @@ fn process(data: String) {
             }
         }
     }
+    for (i, jbox) in boxes.iter().enumerate() {
+        println!("{i}: {jbox:?}");
+    }
 
     // 'clever' way to avoid sorting `boxes` itself
     let mut sorted_box_indices: Vec<usize> = (0..boxes.len()).collect();
@@ -109,33 +115,56 @@ fn process(data: String) {
             .closest_distance
             .total_cmp(&boxes[j].closest_distance)
     });
+    println!("{sorted_box_indices:?}");
 
     let mut circuits: Vec<Circuit> = vec![];
 
+    let limit = 100;
+    let mut count = 0;
     'outer: for i in sorted_box_indices {
-        let closest_index = boxes[i].closest_index;
+        println!("count: {count}");
+        print_circuits(&mut circuits);
+        if count == limit {
+            break;
+        }
+
+        let closest_box = &boxes[boxes[i].closest_index];
 
         // check if we need to add it to an existing circuit
         for circuit in circuits.iter_mut() {
-            if circuit.contains(&i) {
-                // println!("circuit {} already contains {}", circuit, boxes[i]);
+            if circuit.contains(&boxes[i]) {
+                println!("circuit {} already contains {}", circuit, boxes[i]);
                 continue 'outer;
             }
-            if circuit.contains(&closest_index) {
-                println!("circuit {} is closest to {}", circuit, boxes[i]);
-                circuit.push(i);
+            if circuit.contains(closest_box) {
+                println!("added {} to {}", boxes[i], circuit);
+                circuit.push(&boxes[i]);
+                count += 1;
                 continue 'outer;
             }
         }
 
         // nope, so make a new circuit
         let new_circuit = Circuit {
-            box_indices: vec![i, closest_index],
-            boxes: &boxes,
+            boxes: vec![&boxes[i], &closest_box],
         };
-        println!("made a new circuit {} for {}", new_circuit, boxes[i]);
+        println!("new circuit {}", new_circuit);
         circuits.push(new_circuit);
+        count += 2;
     }
 
-    // println!("{circuits:?}");
+    print_circuits(&mut circuits);
+}
+
+fn print_circuits(circuits: &mut Vec<Circuit>) {
+    circuits.sort_by(|a, b| b.len().cmp(&a.len()));
+    for circuit in circuits.iter() {
+        println!("{circuit}");
+    }
+    let answer: usize = circuits
+        .iter()
+        .take(3)
+        .map(|circuit| circuit.len())
+        .product();
+    println!("{answer}");
 }
