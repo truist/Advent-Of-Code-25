@@ -7,6 +7,9 @@ use std::{fmt, fs, path::PathBuf};
 struct Args {
     /// Path to the input file
     input: PathBuf,
+
+    /// Number of connections to make
+    connections: usize,
 }
 
 fn main() {
@@ -20,7 +23,7 @@ fn main() {
         }
     };
 
-    process(contents);
+    process(contents, args.connections);
 }
 
 #[derive(Debug, PartialEq)]
@@ -28,8 +31,6 @@ struct JunctionBox {
     x: usize,
     y: usize,
     z: usize,
-    closest_index: usize,
-    closest_distance: f64,
 }
 
 impl fmt::Display for JunctionBox {
@@ -45,6 +46,30 @@ impl JunctionBox {
         let dz = self.z as f64 - other.z as f64;
 
         (dx * dx + dy * dy + dz * dz).sqrt()
+    }
+
+    fn find_containing_circuit<'a>(
+        &'a self,
+        circuits: &'a mut [Circuit<'a>],
+    ) -> Option<&'a mut Circuit> {
+        for circuit in circuits.iter_mut() {
+            if circuit.contains(self) {
+                return Some(circuit);
+            }
+        }
+        return None;
+    }
+}
+
+struct Distance<'a> {
+    left: &'a JunctionBox,
+    right: &'a JunctionBox,
+    distance: f64,
+}
+
+impl<'a> fmt::Display for Distance<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[{},{},{}]", self.distance, self.left, self.right)
     }
 }
 
@@ -64,6 +89,10 @@ impl<'a> fmt::Display for Circuit<'a> {
 }
 
 impl<'a> Circuit<'a> {
+    fn append(&mut self, circuit: &mut Circuit<'a>) {
+        self.boxes.append(&mut circuit.boxes)
+    }
+
     fn contains(&self, jbox: &JunctionBox) -> bool {
         self.boxes.contains(&jbox)
     }
@@ -77,7 +106,7 @@ impl<'a> Circuit<'a> {
     }
 }
 
-fn process(data: String) {
+fn process(data: String, connections: usize) {
     let mut boxes: Vec<JunctionBox> = data
         .lines()
         .map(|line| {
@@ -86,78 +115,105 @@ fn process(data: String) {
                 x: split.next().unwrap().parse().unwrap(),
                 y: split.next().unwrap().parse().unwrap(),
                 z: split.next().unwrap().parse().unwrap(),
-                closest_index: usize::MAX,
-                closest_distance: f64::MAX,
             }
         })
         .collect();
 
+    let mut distances: Vec<Distance> = vec![];
     for i in 0..boxes.len() {
         for j in 0..boxes.len() {
             if i == j {
                 continue;
             }
             let distance = boxes[i].distance_to(&boxes[j]);
-            if distance < boxes[i].closest_distance {
-                boxes[i].closest_distance = distance;
-                boxes[i].closest_index = j;
-            }
+            distances.push(Distance {
+                left: &boxes[i],
+                right: &boxes[j],
+                distance,
+            });
         }
     }
-    for (i, jbox) in boxes.iter().enumerate() {
-        println!("{i}: {jbox:?}");
+    distances.sort_by(|a, b| a.distance.total_cmp(&b.distance));
+    for distance in &distances {
+        println!("{distance}");
     }
-
-    // 'clever' way to avoid sorting `boxes` itself
-    let mut sorted_box_indices: Vec<usize> = (0..boxes.len()).collect();
-    sorted_box_indices.sort_by(|&i, &j| {
-        boxes[i]
-            .closest_distance
-            .total_cmp(&boxes[j].closest_distance)
-    });
-    println!("{sorted_box_indices:?}");
 
     let mut circuits: Vec<Circuit> = vec![];
 
-    let limit = 100;
     let mut count = 0;
-    'outer: for i in sorted_box_indices {
+    for distance in &distances {
         println!("count: {count}");
-        print_circuits(&mut circuits);
-        if count == limit {
+        print_circuits(&circuits);
+        if count == connections {
             break;
         }
 
-        let closest_box = &boxes[boxes[i].closest_index];
-
         // check if we need to add it to an existing circuit
-        for circuit in circuits.iter_mut() {
-            if circuit.contains(&boxes[i]) {
-                println!("circuit {} already contains {}", circuit, boxes[i]);
-                continue 'outer;
-            }
-            if circuit.contains(closest_box) {
-                println!("added {} to {}", boxes[i], circuit);
-                circuit.push(&boxes[i]);
-                count += 1;
-                continue 'outer;
-            }
-        }
+        if let Some(&mut left_circuit) = distance.left.find_containing_circuit(&mut circuits) {
+            println!(
+                "circuit {} already contains left {}",
+                left_circuit, distance.left
+            );
 
-        // nope, so make a new circuit
-        let new_circuit = Circuit {
-            boxes: vec![&boxes[i], &closest_box],
-        };
-        println!("new circuit {}", new_circuit);
-        circuits.push(new_circuit);
-        count += 2;
+            if let Some(&mut right_circuit) = distance.right.find_containing_circuit(&mut circuits)
+            {
+                println!(
+                    "circuit {} already contains right {}",
+                    right_circuit, distance.right
+                );
+
+                if std::ptr::eq(&left_circuit, &right_circuit) {
+                    println!("the two circuits are the same, so there's nothing to do");
+
+                    continue;
+                } else {
+                    println!("the two circuits are different, and have to be merged");
+
+                    left_circuit.append(&mut right_circuit);
+                    circuits.remove(
+                        circuits
+                            .iter()
+                            .position(|circuit| std::ptr::eq(circuit, &right_circuit))
+                            .unwrap(),
+                    );
+                    println!("merged: {}", left_circuit);
+                    count += 1;
+                }
+            } else {
+                println!("adding {} to {}", distance.right, left_circuit);
+
+                left_circuit.push(distance.right);
+                count += 1;
+            }
+        } else if let Some(&mut right_circuit) =
+            distance.right.find_containing_circuit(&mut circuits)
+        {
+            println!(
+                "circuit {} already contains right {}",
+                right_circuit, distance.right
+            );
+
+            println!("adding {} to {}", distance.left, right_circuit);
+            right_circuit.push(distance.left);
+            count += 1;
+        } else {
+            let new_circuit = Circuit {
+                boxes: vec![distance.left, distance.right],
+            };
+            println!(
+                "both boxes are outside a circuit; making one: {}",
+                new_circuit
+            );
+            circuits.push(new_circuit);
+            count += 1;
+        }
     }
 
-    print_circuits(&mut circuits);
+    print_circuits(&circuits);
 }
 
-fn print_circuits(circuits: &mut Vec<Circuit>) {
-    circuits.sort_by(|a, b| b.len().cmp(&a.len()));
+fn print_circuits(circuits: &Vec<Circuit>) {
+    // circuits.sort_by(|a, b| b.len().cmp(&a.len()));
     for circuit in circuits.iter() {
         println!("{circuit}");
     }
@@ -166,5 +222,5 @@ fn print_circuits(circuits: &mut Vec<Circuit>) {
         .take(3)
         .map(|circuit| circuit.len())
         .product();
-    println!("{answer}");
+    println!("answer: {answer}");
 }
