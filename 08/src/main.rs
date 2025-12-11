@@ -7,9 +7,6 @@ use std::{fs, path::PathBuf};
 struct Args {
     /// Path to the input file
     input: PathBuf,
-
-    /// Number of connections to make
-    connections: usize,
 }
 
 fn main() {
@@ -23,7 +20,7 @@ fn main() {
         }
     };
 
-    process(contents, args.connections);
+    process(contents);
 }
 
 #[derive(Debug, PartialEq)]
@@ -42,12 +39,6 @@ impl JunctionBox {
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
 }
-
-// impl fmt::Display for JunctionBox {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         write!(f, "[{},{},{}]", self.x, self.y, self.z)
-//     }
-// }
 
 #[derive(Debug)]
 struct Distance {
@@ -79,7 +70,7 @@ impl Circuit {
     }
 }
 
-fn process(data: String, connections: usize) {
+fn process(data: String) {
     let boxes: Vec<JunctionBox> = data
         .lines()
         .map(|line| {
@@ -91,9 +82,6 @@ fn process(data: String, connections: usize) {
             }
         })
         .collect();
-    // for (i, jbox) in boxes.iter().enumerate() {
-    //     println!("{i}: {jbox}");
-    // }
 
     let mut distances: Vec<Distance> = vec![];
     for i in 0..boxes.len() - 1 {
@@ -106,33 +94,16 @@ fn process(data: String, connections: usize) {
         }
     }
     distances.sort_by(|a, b| a.distance.total_cmp(&b.distance));
-    // for distance in &distances {
-    //     println!("{distance:?}");
-    // }
 
     let mut circuits: Vec<Circuit> = vec![];
-
-    for i in 0..connections {
-        let distance = &distances[i];
-
-        // println!(
-        //     "Evaluating boxes {} and {}...",
-        //     distance.left_idx, distance.right_idx
-        // );
+    for distance in distances {
         let left_circuit_idx = circuits.iter().position(|c| c.contains(&distance.left_idx));
         let right_circuit_idx = circuits
             .iter()
             .position(|c| c.contains(&distance.right_idx));
         match (left_circuit_idx, right_circuit_idx) {
             (Some(lci), Some(rci)) => {
-                if lci == rci {
-                    // println!("they're in the same circuit already",);
-                } else {
-                    // println!(
-                    //     "the two circuits are different ({} and {}), and have to be merged",
-                    //     lci, rci
-                    // );
-
+                if lci != rci {
                     let (earlier, later) = if lci < rci { (lci, rci) } else { (rci, lci) };
                     let (first_part, last_part) = circuits.split_at_mut(later);
                     let left_circuit = &mut first_part[earlier];
@@ -143,29 +114,24 @@ fn process(data: String, connections: usize) {
                 }
             }
             (Some(lci), None) => {
-                // println!("adding box {} to circuit {}", distance.right_idx, lci);
-
                 circuits[lci].push(distance.right_idx);
             }
             (None, Some(rci)) => {
-                // println!("adding box {} to circuit {}", distance.left_idx, rci);
                 circuits[rci].push(distance.left_idx);
             }
             (None, None) => {
-                // println!("making a new circuit",);
                 let new_circuit = Circuit {
                     boxes: vec![distance.left_idx, distance.right_idx],
                 };
                 circuits.push(new_circuit);
             }
         };
+        if circuits.len() == 1 && circuits[0].len() == boxes.len() {
+            println!(
+                "{}",
+                boxes[distance.left_idx].x * boxes[distance.right_idx].x
+            );
+            break;
+        }
     }
-
-    circuits.sort_by(|a, b| b.len().cmp(&a.len()));
-    let answer: usize = circuits
-        .iter()
-        .take(3)
-        .map(|circuit| circuit.len())
-        .product();
-    println!("{answer}");
 }
