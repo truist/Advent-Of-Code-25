@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::{fmt, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 /// AOC 25 day 08
 #[derive(Parser)]
@@ -33,12 +33,6 @@ struct JunctionBox {
     z: usize,
 }
 
-impl fmt::Display for JunctionBox {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{},{},{}]", self.x, self.y, self.z)
-    }
-}
-
 impl JunctionBox {
     fn distance_to(&self, other: &JunctionBox) -> f64 {
         let dx = self.x as f64 - other.x as f64;
@@ -47,67 +41,46 @@ impl JunctionBox {
 
         (dx * dx + dy * dy + dz * dz).sqrt()
     }
-
-    fn find_containing_circuit<'a>(
-        &'a self,
-        circuits: &'a mut [Circuit<'a>],
-    ) -> Option<&'a mut Circuit> {
-        for circuit in circuits.iter_mut() {
-            if circuit.contains(self) {
-                return Some(circuit);
-            }
-        }
-        return None;
-    }
 }
 
-struct Distance<'a> {
-    left: &'a JunctionBox,
-    right: &'a JunctionBox,
+// impl fmt::Display for JunctionBox {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         write!(f, "[{},{},{}]", self.x, self.y, self.z)
+//     }
+// }
+
+#[derive(Debug)]
+struct Distance {
+    left_idx: usize,
+    right_idx: usize,
     distance: f64,
 }
 
-impl<'a> fmt::Display for Distance<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{},{},{}]", self.distance, self.left, self.right)
-    }
-}
-
 #[derive(Debug)]
-struct Circuit<'a> {
-    boxes: Vec<&'a JunctionBox>,
+struct Circuit {
+    boxes: Vec<usize>,
 }
 
-impl<'a> fmt::Display for Circuit<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(")?;
-        for jbox in self.boxes.iter() {
-            write!(f, "{}", jbox)?;
-        }
-        write!(f, ") ({})", self.len())
-    }
-}
-
-impl<'a> Circuit<'a> {
-    fn append(&mut self, circuit: &mut Circuit<'a>) {
+impl Circuit {
+    fn append(&mut self, circuit: &mut Circuit) {
         self.boxes.append(&mut circuit.boxes)
     }
 
-    fn contains(&self, jbox: &JunctionBox) -> bool {
-        self.boxes.contains(&jbox)
+    fn contains(&self, jbox_idx: &usize) -> bool {
+        self.boxes.contains(&jbox_idx)
     }
 
     fn len(&self) -> usize {
         self.boxes.len()
     }
 
-    fn push(&mut self, jbox: &'a JunctionBox) {
-        self.boxes.push(jbox);
+    fn push(&mut self, jbox_idx: usize) {
+        self.boxes.push(jbox_idx);
     }
 }
 
 fn process(data: String, connections: usize) {
-    let mut boxes: Vec<JunctionBox> = data
+    let boxes: Vec<JunctionBox> = data
         .lines()
         .map(|line| {
             let mut split = line.splitn(3, ",");
@@ -118,109 +91,81 @@ fn process(data: String, connections: usize) {
             }
         })
         .collect();
+    // for (i, jbox) in boxes.iter().enumerate() {
+    //     println!("{i}: {jbox}");
+    // }
 
     let mut distances: Vec<Distance> = vec![];
-    for i in 0..boxes.len() {
-        for j in 0..boxes.len() {
-            if i == j {
-                continue;
-            }
-            let distance = boxes[i].distance_to(&boxes[j]);
+    for i in 0..boxes.len() - 1 {
+        for j in i + 1..boxes.len() {
             distances.push(Distance {
-                left: &boxes[i],
-                right: &boxes[j],
-                distance,
+                left_idx: i,
+                right_idx: j,
+                distance: boxes[i].distance_to(&boxes[j]),
             });
         }
     }
     distances.sort_by(|a, b| a.distance.total_cmp(&b.distance));
-    for distance in &distances {
-        println!("{distance}");
-    }
+    // for distance in &distances {
+    //     println!("{distance:?}");
+    // }
 
     let mut circuits: Vec<Circuit> = vec![];
 
-    let mut count = 0;
-    for distance in &distances {
-        println!("count: {count}");
-        print_circuits(&circuits);
-        if count == connections {
-            break;
-        }
+    for i in 0..connections {
+        let distance = &distances[i];
 
-        // check if we need to add it to an existing circuit
-        if let Some(&mut left_circuit) = distance.left.find_containing_circuit(&mut circuits) {
-            println!(
-                "circuit {} already contains left {}",
-                left_circuit, distance.left
-            );
-
-            if let Some(&mut right_circuit) = distance.right.find_containing_circuit(&mut circuits)
-            {
-                println!(
-                    "circuit {} already contains right {}",
-                    right_circuit, distance.right
-                );
-
-                if std::ptr::eq(&left_circuit, &right_circuit) {
-                    println!("the two circuits are the same, so there's nothing to do");
-
-                    continue;
+        // println!(
+        //     "Evaluating boxes {} and {}...",
+        //     distance.left_idx, distance.right_idx
+        // );
+        let left_circuit_idx = circuits.iter().position(|c| c.contains(&distance.left_idx));
+        let right_circuit_idx = circuits
+            .iter()
+            .position(|c| c.contains(&distance.right_idx));
+        match (left_circuit_idx, right_circuit_idx) {
+            (Some(lci), Some(rci)) => {
+                if lci == rci {
+                    // println!("they're in the same circuit already",);
                 } else {
-                    println!("the two circuits are different, and have to be merged");
+                    // println!(
+                    //     "the two circuits are different ({} and {}), and have to be merged",
+                    //     lci, rci
+                    // );
 
-                    left_circuit.append(&mut right_circuit);
-                    circuits.remove(
-                        circuits
-                            .iter()
-                            .position(|circuit| std::ptr::eq(circuit, &right_circuit))
-                            .unwrap(),
-                    );
-                    println!("merged: {}", left_circuit);
-                    count += 1;
+                    let (earlier, later) = if lci < rci { (lci, rci) } else { (rci, lci) };
+                    let (first_part, last_part) = circuits.split_at_mut(later);
+                    let left_circuit = &mut first_part[earlier];
+                    let right_circuit = &mut last_part[0];
+                    left_circuit.append(right_circuit);
+
+                    circuits.remove(later);
                 }
-            } else {
-                println!("adding {} to {}", distance.right, left_circuit);
-
-                left_circuit.push(distance.right);
-                count += 1;
             }
-        } else if let Some(&mut right_circuit) =
-            distance.right.find_containing_circuit(&mut circuits)
-        {
-            println!(
-                "circuit {} already contains right {}",
-                right_circuit, distance.right
-            );
+            (Some(lci), None) => {
+                // println!("adding box {} to circuit {}", distance.right_idx, lci);
 
-            println!("adding {} to {}", distance.left, right_circuit);
-            right_circuit.push(distance.left);
-            count += 1;
-        } else {
-            let new_circuit = Circuit {
-                boxes: vec![distance.left, distance.right],
-            };
-            println!(
-                "both boxes are outside a circuit; making one: {}",
-                new_circuit
-            );
-            circuits.push(new_circuit);
-            count += 1;
-        }
+                circuits[lci].push(distance.right_idx);
+            }
+            (None, Some(rci)) => {
+                // println!("adding box {} to circuit {}", distance.left_idx, rci);
+                circuits[rci].push(distance.left_idx);
+            }
+            (None, None) => {
+                // println!("making a new circuit",);
+                let new_circuit = Circuit {
+                    boxes: vec![distance.left_idx, distance.right_idx],
+                };
+                circuits.push(new_circuit);
+            }
+        };
     }
 
-    print_circuits(&circuits);
-}
-
-fn print_circuits(circuits: &Vec<Circuit>) {
-    // circuits.sort_by(|a, b| b.len().cmp(&a.len()));
-    for circuit in circuits.iter() {
-        println!("{circuit}");
-    }
+    circuits.sort_by(|a, b| b.len().cmp(&a.len()));
     let answer: usize = circuits
         .iter()
         .take(3)
         .map(|circuit| circuit.len())
         .product();
-    println!("answer: {answer}");
+    println!("{answer}");
 }
