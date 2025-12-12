@@ -53,7 +53,7 @@ fn process(data: String) {
         .collect();
 
     // I ran this first to verify that input.txt corners are clockwise, because the sum was positive,
-    // per ChatGPT
+    // per ChatGPT. Note that this was the ONLY use of ChatGPT for this solution.
     // let mut sum: isize = 0;
     // for i in 0..reds.len() {
     //     let j = (i + 1) % reds.len();
@@ -183,6 +183,7 @@ fn detect_inside_corners(first: &Tile, second: &Tile, reds: &Vec<Tile>) -> bool 
     false
 }
 fn detect_intersections(first: &Tile, second: &Tile, reds: &Vec<Tile>) -> bool {
+    // println!("checking intersections between {first:?} and {second:?}");
     let leftest = first.x.min(second.x);
     let rightest = first.x.max(second.x);
     let highest = first.y.min(second.y);
@@ -194,19 +195,26 @@ fn detect_intersections(first: &Tile, second: &Tile, reds: &Vec<Tile>) -> bool {
 
         if first.x == second.x
             && between(leftest, first.x, rightest)
-            && first.y <= highest
-            && second.y >= lowest
+            && ((first.y <= highest && second.y >= lowest)
+                || (second.y <= highest && first.y >= lowest))
         {
-            println!("vertical edge");
+            // println!("vertical edge");
             return true;
         }
 
+        // if first.y == second.y {
+        //     println!(
+        //         "{}-{}-{}, {},{}, {},{}",
+        //         highest, first.y, lowest, first.x, leftest, second.x, rightest
+        //     );
+        // }
+
         if first.y == second.y
             && between(highest, first.y, lowest)
-            && first.x <= leftest
-            && second.x >= rightest
+            && ((first.x <= leftest && second.x >= rightest)
+                || (second.x <= leftest && first.x >= rightest))
         {
-            println!("horizontal edge");
+            // println!("horizontal edge");
             return true;
         }
     }
