@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::{fs, path::PathBuf};
 
 use clap::Parser;
@@ -41,32 +41,55 @@ fn process(data: String) {
 
 #[derive(Clone)]
 struct State {
-    lights: Vec<bool>,
+    joltages: Vec<usize>,
     press_count: usize,
 }
 
 fn find_min(machine: &Machine) -> usize {
+    let mut seen: HashSet<Vec<usize>> = HashSet::new();
+
     let start_state = State {
-        lights: vec![false; machine.lights.len()],
+        joltages: vec![0; machine.joltages.len()],
         press_count: 0,
     };
 
     let mut queue: VecDeque<State> = VecDeque::new();
     queue.push_back(start_state);
 
+    let mut max_press = 0;
     while let Some(state) = queue.pop_front() {
         for button in machine.buttons.iter() {
             let mut state = state.clone();
 
             state.press_count += 1;
-            for light in button.iter() {
-                state.lights[*light] = !state.lights[*light];
+            if state.press_count > max_press {
+                max_press += 1;
+                println!(
+                    "max_press: {max_press}; queue size: {}; cache size: {}",
+                    queue.len(),
+                    seen.len()
+                );
             }
 
-            if machine.lights == state.lights {
+            let mut overflow = false;
+            for i in button.iter() {
+                state.joltages[*i] += 1;
+
+                if state.joltages[*i] > machine.joltages[*i] {
+                    overflow = true;
+                }
+            }
+            if overflow {
+                continue;
+            }
+
+            if machine.joltages == state.joltages {
+                println!("one machine done: {}", state.press_count);
                 return state.press_count;
             } else {
-                queue.push_back(state);
+                if seen.insert(state.joltages.clone()) {
+                    queue.push_back(state);
+                }
             }
         }
     }
