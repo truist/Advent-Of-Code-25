@@ -58,43 +58,62 @@ fn find_min(machine: &Machine) -> usize {
 
     let mut max_press = 0;
     while let Some(state) = queue.pop_front() {
-        for button in machine.buttons.iter() {
-            let mut state = state.clone();
+        if state.press_count > max_press {
+            max_press += 1;
+            println!(
+                "max_press: {max_press}; queue size: {}; cache size: {}",
+                queue.len(),
+                seen.len()
+            );
+        }
 
-            state.press_count += 1;
-            if state.press_count > max_press {
-                max_press += 1;
-                println!(
-                    "max_press: {max_press}; queue size: {}; cache size: {}",
-                    queue.len(),
-                    seen.len()
-                );
-            }
-
-            let mut overflow = false;
-            for i in button.iter() {
-                state.joltages[*i] += 1;
-
-                if state.joltages[*i] > machine.joltages[*i] {
-                    overflow = true;
-                }
-            }
-            if overflow {
-                continue;
-            }
-
-            if machine.joltages == state.joltages {
-                println!("one machine done: {}", state.press_count);
-                return state.press_count;
-            } else {
-                if seen.insert(state.joltages.clone()) {
-                    queue.push_back(state);
+        for next_state in push_buttons(&state, &machine) {
+            match next_state {
+                NextState::Answer(val) => return val,
+                NextState::Queue(state) => {
+                    if seen.insert(state.joltages.clone()) {
+                        queue.push_back(state);
+                    }
                 }
             }
         }
     }
 
-    0 // can't ever get here
+    panic!("It shouldn't be possible to get here without finding an answer first");
+}
+
+enum NextState {
+    Answer(usize),
+    Queue(State),
+}
+
+fn push_buttons(state: &State, machine: &Machine) -> Vec<NextState> {
+    let mut next_states = vec![];
+    for button in machine.buttons.iter() {
+        let mut state = state.clone();
+
+        state.press_count += 1;
+
+        let mut overflow = false;
+        for i in button.iter() {
+            state.joltages[*i] += 1;
+
+            if state.joltages[*i] > machine.joltages[*i] {
+                overflow = true;
+            }
+        }
+        if overflow {
+            continue;
+        }
+
+        if machine.joltages == state.joltages {
+            println!("one machine done: {}", state.press_count);
+            next_states.push(NextState::Answer(state.press_count));
+        } else {
+            next_states.push(NextState::Queue(state));
+        }
+    }
+    next_states
 }
 
 fn parse_machines(data: String) -> Vec<Machine> {
