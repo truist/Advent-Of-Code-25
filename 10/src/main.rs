@@ -1,4 +1,4 @@
-use std::collections::{HashSet, VecDeque};
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::{fs, path::PathBuf};
 
@@ -40,143 +40,191 @@ fn process(data: String) {
     for m in 0..machines.len() {
         let machine = &machines[m];
         println!("Starting machine {m} ({:?}) ", machine.joltages);
-        answer += find_min(machine);
+        answer += find_min_for_machine(machine);
     }
     println!("{answer}");
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct State {
     joltages: Vec<usize>,
     press_count: usize,
 }
 
-fn find_min(machine: &Machine) -> usize {
+fn find_min_for_machine(machine: &Machine) -> usize {
     let maps = map_joltages_to_buttons(machine);
+
+    let mut seen: HashMap<Vec<usize>, usize> = HashMap::new();
 
     let mut start_states = vec![State {
         joltages: vec![0; machine.joltages.len()],
         press_count: 0,
     }];
     for map in maps {
-        let new_starts =
-            find_min_targeted(machine, start_states, map.joltage_index, map.button_indexes);
-        print!("{}", new_starts.len());
+        println!(
+            " Starting joltage #{} with {} buttons and {} states and {} cache",
+            map.joltage_index,
+            map.button_indexes.len(),
+            start_states.len(),
+            seen.len(),
+        );
+        let new_states = find_paths_to_joltage(
+            machine,
+            &start_states,
+            &mut seen,
+            &map.joltage_index,
+            &map.button_indexes,
+        );
+        // println!(" ...resulting states: {}", new_states.len());
 
-        // let's assume/hope that only the shortest path to the intermediate states are needed...
-        // let min_presses = new_starts
+        let min = new_states
+            .iter()
+            .map(|state| state.press_count)
+            .min()
+            .unwrap();
+        for new_state in &new_states {
+            if new_state.press_count == min && new_state.joltages == machine.joltages {
+                println!("Min pressses: {min}\n");
+                return min;
+            }
+        }
+
+        // let mut selected_buttons: Vec<Vec<usize>> = vec![];
+        // for i in 0..machine.buttons.len() {
+        //     if map.button_indexes.contains(&i) {
+        //         selected_buttons.push(machine.buttons[i].clone());
+        //     }
+        // }
+        // println!(
+        //     "Button set {:?} (with buttons {:?}) had {} paths to hit joltage {}'s target:",
+        //     map.button_indexes,
+        //     selected_buttons,
+        //     new_states.len(),
+        //     map.joltage_index
+        // );
+        // for new_state in &new_states {
+        //     println!("{new_state:?}");
+        // }
+        // let example_min = new_states
         //     .iter()
         //     .min_by_key(|state| state.press_count)
-        //     .unwrap()
-        //     .press_count;
-        // start_states = new_starts
-        //     .into_iter()
-        //     .filter(|state| state.press_count == min_presses)
-        //     .collect();
-        start_states = new_starts;
+        //     .unwrap();
+        // println!("Example best case state: {example_min:?}");
+
+        start_states = new_states;
     }
 
-    let min = start_states
-        .iter()
-        .filter_map(|state| {
-            if state.joltages == machine.joltages {
-                Some(state.press_count)
-            } else {
-                None
-            }
-        })
-        .min()
-        .unwrap();
-    println!("\n{min}");
-    min
+    panic!("It shouldn't be possible to get here");
 }
 
-fn find_min_targeted(
+fn find_paths_to_joltage(
     machine: &Machine,
-    start_states: Vec<State>,
-    target_joltage: usize,
-    button_set: Vec<usize>,
+    start_states: &Vec<State>,
+    seen: &mut HashMap<Vec<usize>, usize>,
+    target_joltage: &usize,
+    button_set: &Vec<usize>,
 ) -> Vec<State> {
-    let mut queue: VecDeque<State> = VecDeque::new();
-    queue.extend(start_states.clone());
+    // Permute all possible combinations of button presses.
+    // Order doesn't matter; just counts (per button).
+    // Never any need to press a button more than (target - current).
+    // A button might be pressed anywhere from 0..(target-current).
+    //
+    // So e.g. 5 buttons with a target of 200 gives us 200^5 = 320B possible combinations.
+    // But since we know we're evaluating all possibilities,
+    // and not trying to find the shortest path first, recursive DFS would work.
+    // Or that's easy to convert to a queue later.
+    // We don't really need to know the "path" - just the button count that gets us there.
+    //
+    // Keep the "seen" idea... but of what? What is it safe to skip?
+    //
+    // Idea credit to michelkraemer at https://www.reddit.com/r/adventofcode/comments/1pity70/comment/nt9h7qw/
 
-    let mut seen: HashSet<Vec<usize>> = HashSet::new();
+    let mut final_states = vec![];
+    for state in start_states {
+        // println!("  Starting: {:?} with {} buttons", state, button_set.len());
 
-    let mut partial_states: Vec<State> = vec![];
-
-    let mut max_press = 0;
-    while let Some(state) = queue.pop_front() {
-        if state.press_count > max_press {
-            max_press = state.press_count;
-            print!(".");
-            io::stdout().flush().unwrap();
-        }
-
-        for next_state in push_buttons(&state, &machine, &target_joltage, &button_set) {
-            match next_state {
-                NextState::OneTarget(state) => {
-                    if seen.insert(state.joltages.clone()) {
-                        partial_states.push(state);
-                    }
-                }
-                NextState::Queue(state) => {
-                    if seen.insert(state.joltages.clone()) {
-                        queue.push_back(state);
-                    }
-                }
-            }
-        }
+        final_states.append(&mut find_all_button_combos(
+            state,
+            seen,
+            machine,
+            &target_joltage,
+            &button_set,
+            &vec![],
+        ));
     }
 
-    if partial_states.len() == 0 {
-        start_states
+    if final_states.len() == 0 {
+        start_states.clone()
     } else {
-        partial_states
+        final_states
     }
 }
 
-enum NextState {
-    OneTarget(State),
-    Queue(State),
-}
-
-fn push_buttons(
+fn find_all_button_combos(
     state: &State,
+    seen: &mut HashMap<Vec<usize>, usize>,
     machine: &Machine,
     target_joltage: &usize,
-    button_filter: &Vec<usize>,
-) -> Vec<NextState> {
-    let mut next_states = vec![];
+    button_set: &Vec<usize>,
+    button_sequence: &Vec<usize>,
+) -> Vec<State> {
+    let mut final_states = vec![];
+    if button_set.len() == 0 {
+        return final_states;
+    }
 
-    for button_index in 0..machine.buttons.len() {
-        if !button_filter.contains(&button_index) {
-            continue;
-        }
-        let button = &machine.buttons[button_index];
+    let mut remaining_buttons = button_set.clone();
+    let button_index = remaining_buttons.remove(0);
+    let current_button = &machine.buttons[button_index];
+    let mut new_button_sequence = button_sequence.clone();
+    new_button_sequence.push(button_index);
 
+    'presses: for press_count in
+        0..=machine.joltages[*target_joltage] - state.joltages[*target_joltage]
+    {
         let mut new_state = state.clone();
 
-        new_state.press_count += 1;
+        new_state.press_count += press_count;
 
-        let mut overflow = false;
-        for joltage_index in button.iter() {
-            new_state.joltages[*joltage_index] += 1;
+        for joltage_index in current_button.iter() {
+            new_state.joltages[*joltage_index] += press_count;
 
             if new_state.joltages[*joltage_index] > machine.joltages[*joltage_index] {
-                overflow = true;
+                continue 'presses;
             }
         }
-        if overflow {
-            continue;
-        }
+
+        // if let Some(seen_press_count) = seen.get_mut(&new_state.joltages) {
+        //     if new_state.press_count > *seen_press_count {
+        //         // print!(".");
+        //         // io::stdout().flush().unwrap();
+        //         continue;
+        //     }
+        //     *seen_press_count = new_state.press_count;
+        // } else {
+        //     seen.insert(new_state.joltages.clone(), new_state.press_count);
+        // }
 
         if machine.joltages[*target_joltage] == new_state.joltages[*target_joltage] {
-            next_states.push(NextState::OneTarget(new_state));
+            final_states.push(new_state);
         } else {
-            next_states.push(NextState::Queue(new_state));
+            let downstream_states = find_all_button_combos(
+                &new_state,
+                seen,
+                machine,
+                target_joltage,
+                &remaining_buttons,
+                &new_button_sequence,
+            );
+            for downstream in downstream_states {
+                if downstream.joltages[*target_joltage] == machine.joltages[*target_joltage] {
+                    final_states.push(downstream);
+                }
+            }
         }
     }
-    next_states
+
+    final_states
 }
 
 #[derive(Debug)]
@@ -185,7 +233,6 @@ struct JoltageButtonMap {
     button_indexes: Vec<usize>,
 }
 
-// idea credit to michelkraemer at https://www.reddit.com/r/adventofcode/comments/1pity70/comment/nt9h7qw/
 fn map_joltages_to_buttons(machine: &Machine) -> Vec<JoltageButtonMap> {
     let mut maps: Vec<JoltageButtonMap> = vec![];
     for joltage_index in 0..machine.joltages.len() {
@@ -201,12 +248,13 @@ fn map_joltages_to_buttons(machine: &Machine) -> Vec<JoltageButtonMap> {
         }
     }
 
-    maps.sort_by(|a, b| {
-        a.button_indexes
-            .len()
-            .cmp(&b.button_indexes.len())
-            .then_with(|| machine.joltages[b.joltage_index].cmp(&machine.joltages[a.joltage_index]))
-    });
+    // maps.sort_by(|a, b| {
+    //     a.button_indexes
+    //         .len()
+    //         .cmp(&b.button_indexes.len())
+    //         .then_with(|| machine.joltages[b.joltage_index].cmp(&machine.joltages[a.joltage_index]))
+    // });
+    maps.sort_by(|a, b| machine.joltages[a.joltage_index].cmp(&machine.joltages[b.joltage_index]));
 
     maps
 }
