@@ -24,8 +24,37 @@ fn main() {
 }
 
 #[derive(Debug)]
-struct Present {
-    shape: Vec<Vec<bool>>,
+struct Shape {
+    orientations: Vec<Vec<Vec<bool>>>,
+}
+
+impl Shape {
+    fn new(shape: &Vec<Vec<bool>>) -> Shape {
+        Shape {
+            orientations: Self::orientations(shape),
+        }
+    }
+
+    fn orientations(shape: &Vec<Vec<bool>>) -> Vec<Vec<Vec<bool>>> {
+        let mut shape = shape.clone();
+        let mut orientations = vec![];
+
+        for _ in 0..4 {
+            shape = rotate(shape);
+            orientations.push(shape.clone());
+        }
+
+        shape = flip(shape);
+        for _ in 0..4 {
+            shape = rotate(shape);
+            orientations.push(shape.clone());
+        }
+
+        orientations.sort();
+        orientations.dedup();
+
+        orientations
+    }
 }
 
 #[derive(Debug)]
@@ -37,11 +66,37 @@ struct Region {
 
 fn process(data: String) {
     let mut lines = data.lines();
-    let presents: Vec<Present> = (0..6).map(|_| parse_present(&mut lines)).collect();
+    let shapes: Vec<Shape> = (0..6).map(|_| parse_present(&mut lines)).collect();
     let regions: Vec<Region> = lines.map(|line| parse_region(line)).collect();
+
+    // TODO
 }
 
-fn parse_present<'a>(lines: &mut impl Iterator<Item = &'a str>) -> Present {
+fn rotate(shape: Vec<Vec<bool>>) -> Vec<Vec<bool>> {
+    let mut rotated = vec![vec![false; 3]; 3];
+
+    for r in 0..3 {
+        for c in 0..3 {
+            rotated[2 - c][r] = shape[r][c];
+        }
+    }
+
+    rotated
+}
+
+fn flip(shape: Vec<Vec<bool>>) -> Vec<Vec<bool>> {
+    let mut flipped = vec![vec![false; 3]; 3];
+
+    for r in 0..3 {
+        for c in 0..3 {
+            flipped[r][2 - c] = shape[r][c];
+        }
+    }
+
+    flipped
+}
+
+fn parse_present<'a>(lines: &mut impl Iterator<Item = &'a str>) -> Shape {
     let _skip = lines.next();
     let bools = (0..3)
         .map(|_| lines.next().unwrap())
@@ -49,7 +104,7 @@ fn parse_present<'a>(lines: &mut impl Iterator<Item = &'a str>) -> Present {
         .collect();
     let _skip = lines.next();
 
-    Present { shape: bools }
+    Shape::new(&bools)
 }
 
 fn parse_region(line: &str) -> Region {
@@ -69,5 +124,176 @@ fn parse_region(line: &str) -> Region {
         width,
         height,
         targets,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn str_to_bools(row1: &str, row2: &str, row3: &str) -> Vec<Vec<bool>> {
+        vec![row1, row2, row3]
+            .iter()
+            .map(|row| row.chars().map(|c| c == '#').collect())
+            .collect()
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_rotate() {
+        let original = str_to_bools(
+            "##.",
+            "...",
+            "..#",
+        );
+
+        let expected = str_to_bools(
+            "..#",
+            "#..",
+            "#..",
+        );
+
+        assert_eq!(expected, rotate(original), "rotation works");
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_flip() {
+        let original = str_to_bools(
+            "##.",
+            "...",
+            "..#",
+        );
+
+        let expected = str_to_bools(
+            ".##",
+            "...",
+            "#..",
+        );
+
+        assert_eq!(expected, flip(original), "rotation works");
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_orientations() {
+        let original = str_to_bools(
+            "##.",
+            "...",
+            "..#",
+        );
+        let expected_orientations = vec![
+            str_to_bools(
+                "##.",
+                "...",
+                "..#",
+            ),
+            str_to_bools(
+                ".##",
+                "...",
+                "#..",
+            ),
+
+            str_to_bools(
+                "..#",
+                "..#",
+                "#..",
+            ),
+            str_to_bools(
+                "#..",
+                "..#",
+                "..#",
+            ),
+
+            str_to_bools(
+                "#..",
+                "...",
+                ".##",
+            ),
+            str_to_bools(
+                "..#",
+                "...",
+                "##.",
+            ),
+
+            str_to_bools(
+                "..#",
+                "#..",
+                "#..",
+            ),
+            str_to_bools(
+                "#..",
+                "#..",
+                "..#",
+            ),
+        ];
+        check(expected_orientations, Shape::orientations(&original), "all possible");
+
+
+        let original = str_to_bools(
+            ".#.",
+            "..#",
+            "...",
+        );
+        let expected_orientations = vec![
+            str_to_bools(
+                ".#.",
+                "..#",
+                "...",
+            ),
+            str_to_bools(
+                "...",
+                "..#",
+                ".#.",
+            ),
+            str_to_bools(
+                "...",
+                "#..",
+                ".#.",
+            ),
+            str_to_bools(
+                ".#.",
+                "#..",
+                "...",
+            ),
+        ];
+        check(expected_orientations, Shape::orientations(&original), "flips match rotations");
+
+        let original = str_to_bools(
+            "#..",
+            ".#.",
+            "..#",
+        );
+        let expected_orientations = vec![
+            str_to_bools(
+                "#..",
+                ".#.",
+                "..#",
+            ),
+            str_to_bools(
+                "..#",
+                ".#.",
+                "#..",
+            ),
+        ];
+        check(expected_orientations, Shape::orientations(&original), "only two");
+
+    }
+
+    fn check(expecteds: Vec<Vec<Vec<bool>>>, actuals: Vec<Vec<Vec<bool>>>, desc: &str) {
+        let mut match_count = 0;
+        'expected: for expected in &expecteds {
+            for actual in &actuals {
+                if *expected == *actual {
+                    match_count += 1;
+                    continue 'expected;
+                }
+            }
+        }
+        assert_eq!(
+            expecteds.len(),
+            match_count,
+            "Got {desc} orientations; here are the actuals: {actuals:#?}"
+        );
     }
 }
