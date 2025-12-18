@@ -27,12 +27,17 @@ fn main() {
 #[derive(Debug)]
 struct Shape {
     orientations: Vec<Vec<Vec<bool>>>,
+    area: usize,
 }
 
 impl Shape {
     fn new(shape: &Vec<Vec<bool>>) -> Shape {
         Shape {
             orientations: Self::orientations(shape),
+            area: shape
+                .iter()
+                .map(|row| row.iter().filter(|&cell| *cell).count())
+                .sum(),
         }
     }
 
@@ -69,6 +74,14 @@ impl Region {
     // turns out I have some prior experience with this type of problem!
     // https://github.com/truist/puzzle/blob/master/solver.js
     fn can_fit(&self, shapes: &Vec<Shape>) -> bool {
+        let mut min_area = 0;
+        for shape_index in 0..shapes.len() {
+            min_area += self.targets[shape_index] * shapes[shape_index].area;
+        }
+        if (self.width * self.height) < min_area {
+            return false;
+        }
+
         let board = vec![vec![false; self.width]; self.height];
         let placed = vec![0; self.targets.len()];
         self.try_shapes(&board, shapes, 0, 0, &placed)
@@ -83,7 +96,7 @@ impl Region {
         placed: &Vec<usize>,
     ) -> bool {
         // println!("{r},{c}");
-        println!("{placed:?}");
+        // println!("{placed:?}");
         for shape_index in 0..shapes.len() {
             if placed[shape_index] < self.targets[shape_index] {
                 if self.try_orientations(board, shapes, shape_index, r, c, placed) {
