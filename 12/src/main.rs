@@ -1,4 +1,5 @@
 use clap::Parser;
+use std::io::{self, Write};
 use std::{fs, path::PathBuf};
 
 /// AOC 25 day 12
@@ -64,12 +65,129 @@ struct Region {
     targets: Vec<usize>,
 }
 
+impl Region {
+    // turns out I have some prior experience with this type of problem!
+    // https://github.com/truist/puzzle/blob/master/solver.js
+    fn can_fit(&self, shapes: &Vec<Shape>) -> bool {
+        let board = vec![vec![false; self.width]; self.height];
+        let placed = vec![0; self.targets.len()];
+        self.try_shapes(&board, shapes, 0, 0, &placed)
+    }
+
+    fn try_shapes(
+        &self,
+        board: &Vec<Vec<bool>>,
+        shapes: &Vec<Shape>,
+        r: usize,
+        c: usize,
+        placed: &Vec<usize>,
+    ) -> bool {
+        // println!("{r},{c}");
+        println!("{placed:?}");
+        for shape_index in 0..shapes.len() {
+            if placed[shape_index] < self.targets[shape_index] {
+                if self.try_orientations(board, shapes, shape_index, r, c, placed) {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    fn try_orientations(
+        &self,
+        board: &Vec<Vec<bool>>,
+        shapes: &Vec<Shape>,
+        shape_index: usize,
+        r: usize,
+        c: usize,
+        placed: &Vec<usize>,
+    ) -> bool {
+        'orientations: for orientation in &shapes[shape_index].orientations {
+            for orientation_r in 0..orientation.len() {
+                for orientation_c in 0..orientation[0].len() {
+                    if orientation[orientation_r][orientation_c] {
+                        if r + orientation_r >= self.height
+                            || c + orientation_c >= self.width
+                            || board[r + orientation_r][c + orientation_c]
+                        {
+                            continue 'orientations;
+                        }
+                    }
+                }
+            }
+
+            // if we got here, it fit!
+            let mut board = board.clone();
+
+            for orientation_r in 0..orientation.len() {
+                for orientation_c in 0..orientation[0].len() {
+                    if orientation[orientation_r][orientation_c] {
+                        board[r + orientation_r][c + orientation_c] = true;
+                    }
+                }
+            }
+
+            let mut placed = placed.clone();
+            placed[shape_index] += 1;
+            if placed == self.targets {
+                return true;
+            }
+
+            if self.try_next_location(&board, shapes, r, c, &placed) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    fn try_next_location(
+        &self,
+        board: &Vec<Vec<bool>>,
+        shapes: &Vec<Shape>,
+        mut r: usize,
+        mut c: usize,
+        placed: &Vec<usize>,
+    ) -> bool {
+        loop {
+            c += 1;
+            if c == self.width {
+                c = 0;
+                r += 1;
+                if r == self.height {
+                    return false;
+                }
+            }
+
+            if !board[r][c] {
+                if self.try_shapes(board, shapes, r, c, placed) {
+                    return true;
+                }
+            }
+        }
+    }
+}
+
 fn process(data: String) {
     let mut lines = data.lines();
     let shapes: Vec<Shape> = (0..6).map(|_| parse_present(&mut lines)).collect();
     let regions: Vec<Region> = lines.map(|line| parse_region(line)).collect();
 
-    // TODO
+    let mut can_fit = 0;
+    for region in regions {
+        print!("{region:?}: ");
+        io::stdout().flush().unwrap();
+        if region.can_fit(&shapes) {
+            can_fit += 1;
+            println!("yes");
+        } else {
+            println!("no");
+        }
+    }
+
+    println!("{can_fit}");
 }
 
 fn rotate(shape: Vec<Vec<bool>>) -> Vec<Vec<bool>> {
